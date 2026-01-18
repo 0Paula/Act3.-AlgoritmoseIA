@@ -4,15 +4,15 @@ Comparto script y word de la actividad, para que la persona que decida continuar
 
 Distribución de tareas:
 
-Tarea                        | Persona
----------------------------------------
-Procesamiento datos          | Paula
-Reducción de dimensionalidad | Paula
-Reducción de dimensionalidad | 
-Clusterización               | 
-Clusterización               | 
-M.Aprendizaje supervisado    |
-M.Aprendizaje supervisado    |
-M.Aprendizaje supervisado    |
+|Tarea                        | Persona |
+|---------------------------------------|
+|Procesamiento datos          | Paula   |
+|Reducción de dimensionalidad | Paula   |
+|Reducción de dimensionalidad |         |
+|Clusterización               |         |
+|Clusterización               |         |
+|M.Aprendizaje supervisado    |         |
+|M.Aprendizaje supervisado    |         |
+|M.Aprendizaje supervisado    |         |
 ----------------------------------------
 
