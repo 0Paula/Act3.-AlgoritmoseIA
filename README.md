@@ -6,19 +6,14 @@ Distribución de tareas:
 
 | Tarea | Persona |
 |:------|:--------|
+|Procesamiento datos          | Paula   |
+|Reducción de dimensionalidad | Paula   |
 | Reducción de dimensionalidad | (Escribe nombre aquí) |
 | Clusterización | (Escribe nombre aquí) |
 | M. Aprendizaje supervisado | (Escribe nombre aquí) |
+| M. Aprendizaje supervisado | (Escribe nombre aquí) |
+| M. Aprendizaje supervisado | (Escribe nombre aquí) |
 
-|Tarea                        | Persona |
-|---------------------------------------|
-|Procesamiento datos          | Paula   |
-|Reducción de dimensionalidad | Paula   |
-|Reducción de dimensionalidad |         |
-|Clusterización               |         |
-|Clusterización               |         |
-|M.Aprendizaje supervisado    |         |
-|M.Aprendizaje supervisado    |         |
-|M.Aprendizaje supervisado    |         |
-----------------------------------------
+
+
 
