@@ -1,0 +1,298 @@
+---
+title: "Resolución Actividad 3 máster Bioinformática UNIR (2025)"
+author: "Paula Sánchez Álvarez, Lidia Conde Matos, Lucía Martínez Garrido, Marina Monzo Gallego, Maria Elena Martínez Garrido, Miguel Grande Falceto, Nuria Fernández Pérez"
+date: "2026-01-17"
+output: 
+  html_document: 
+    theme: spacelab
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    fontsize: 11pt
+    mainfont: Calibri
+    highlight: textmate
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# *Análisis de bioestadística aplicada a la expresión génica en Los Simpson*
+
+```{r warning=FALSE}
+# Paquetes necesarios
+
+library(tidyverse)
+library(factoextra)
+library(pheatmap)
+library(gtsummary)
+library(broom)
+library(performance)
+library(pROC)
+library(gt)
+library(writexl)
+
+```
+
+## Carga y limpieza de datos
+
+```{r}
+
+f <- list.files(pattern="Base de datos Los Simpson completa.csv$", ignore.case=TRUE)
+df <- read.csv(f, fileEncoding="UTF-8-BOM", check.names=FALSE)
+
+genes_df <- df %>% select(ADCY3:UHMK1)
+colSums(is.na(genes_df)) #No hay NA
+
+```
+
+## Evaluación de la normalidad (Shapiro-Wilk) para cada gen
+
+```{r}
+
+shapiro_res <- df %>%
+  select(ADCY3:UHMK1) %>%
+  pivot_longer(everything(), names_to = "gen", values_to = "expr") %>%
+  group_by(gen) %>%
+  summarise(p_value = shapiro.test(expr)$p.value, .groups = "drop") %>%
+  mutate(
+    normal_aprox = ifelse(
+      p_value > 0.05,
+      "Distribución normal",
+      "No sigue una distribución normal"
+    )
+  )
+
+table(shapiro_res$normal_aprox)
+
+```
+
+Ninguno de los genes sigue una distrribución normal
+
+## Análisis de componentes principales y clustering
+
+```{r}
+
+# Aplicar PCA
+X <- genes_df
+pca <- prcomp(X, center = TRUE, scale. = TRUE)
+
+sm<-summary(pca)
+
+# Tabla PCA componentes y R2
+r2 <- sm$importance[2, ]  # Fila 2= Proporción de Varianza (R² por componente)
+
+tabla_r2 <- data.frame(
+  Componente = paste0(md("**PC**"), 1:length(r2)),
+  R2 = r2
+)
+
+tb_r2<-gt(tabla_r2) %>%
+  tab_header(title = md("**Varianza Explicada por cada Componente**")) %>%
+  cols_label(R2 = "R²") 
+
+#gtsave(tb_r2, filename = "Tablar2.docx")
+
+tb_r2
+
+# Tabla PCA cargas
+
+cargas_df <- as.data.frame(pca$rotation) # Extraer la matriz de rotación (cargas) y convertirla a Dataframe
+
+tabla_cargas <- cargas_df %>%
+  rownames_to_column(var = "Gen") %>% # Crea la columna Variable (SOLO GENES?)
+  select(Gen, PC1, PC2,PC3,PC4,PC5,PC6) %>%   # Seleccionamos solo PC1 y PC2 ? O LOS 6 O TODOS?
+  arrange(desc(abs(PC1)))             # Ordenar por importancia 
+
+tb_c<-tabla_cargas %>%
+  gt() %>%
+  tab_header(
+    title = md("**Tabla PCA: Cargas Factoriales**"),
+  ) %>%
+  cols_label(
+    Gen = md ("**Gen**"),
+    PC1 = md("**Componente 1**"),
+    PC2 = md("**Componente 2**"),
+    PC3 = md("**Componente 3**"),
+    PC4 = md("**Componente 4**"),
+    PC5 = md("**Componente 5**"),
+    PC6 = md("**Componente 6**")
+  ) %>%
+  fmt_number(
+    decimals = 3
+  ) %>%
+  tab_options(
+    table.width = pct(100),   
+    table.font.size = "14px"
+  )
+
+#gtsave(tb_c, filename = "Tablacargas.docx")
+
+tb_c
+
+```
+
+```{r fig.width=7, fig.height=6}
+
+
+scores <- as.data.frame(pca$x[, 1:6])
+colnames(scores) <- paste0("PC", 1:6)
+df_pca <- bind_cols(df, scores)
+
+#Gráfica de variables egún calidad de representación
+
+fviz_pca_var(pca, col.var="cos2",geom=c("arrow","text"))+
+  ggtitle("PCA - Variables (cos2)") +
+  theme_classic()
+
+# Clustering variables basado en las coordendas PCA
+
+set.seed(1234)
+
+vars <- get_pca_var(pca) # Extraer información de las variables 
+km_pca_var<- kmeans(vars$coord, centers = 3, nstart = 25) # K-meanss sobre las variables
+
+fviz_cluster(
+  km_pca_var,
+  data = vars$coord,
+  geom = c("text", "point"),
+  ellipse.type = "convex",
+  main = "Clustering de Genes"
+) +
+  theme_classic()
+
+# Gráfica de contribuciones de las variables a los componentes 
+
+fviz_contrib(pca, choice = "var", axes = 1:2, top = 17) +
+  labs(title = "Contribución de los genes a PC1 y PC2") +
+  theme_minimal()
+
+#Gráfica de los individuos en función de las categórias de IMC
+
+imc_cat <- cut(df_pca$imc_kg_m2, # Crear un vector con las categorías d IMC
+               breaks = c(-Inf, 24.9, 29.9, Inf), 
+               labels = c("Normal", "Sobrepeso", "Obesidad"))
+
+
+fviz_pca_ind(pca, geom="point",axes=1:2,col.ind= imc_cat,palette = c("darkgreen","orange","red")) +
+  ggtitle("PCA - Individuos por categoría de iMC") +
+  theme_classic()
+
+
+# Clustering de individuo basado en sus scores PCA
+
+set.seed(1234)
+
+ind<-get_pca_ind(pca)
+km_pca_ind <- kmeans(ind$coord, centers = 3, nstart = 1)
+
+fviz_cluster(
+  km_pca_ind,
+  data = ind$coord,
+  geom = "point",
+  ellipse.type = "convex",
+  main = "Clustering de Genes"
+) +
+  theme_classic()
+
+```
+
+## Heatmap
+
+```{r fig.width=9, fig.height=10}
+
+
+pheatmap(genes_df, main="genes") #con los datos crudos de los genes
+
+cors <- cor(df_pca %>% select(ADCY3:UHMK1),
+            df_pca %>% select(PC1:PC6),
+            method="spearman")
+
+pheatmap(cors, main="Correlación Spearman genes–PCs")
+
+```
+
+## Tabla descriptiva
+
+```{r}
+make_terciles <- function(x){
+  q <- quantile(x, probs=c(1/3,2/3))
+  cut(x, breaks=c(-Inf,q,Inf), labels=c("T1","T2","T3"))
+}
+
+df_pca <- df_pca %>%
+  mutate(
+    PC1_t = make_terciles(PC1),
+    PC2_t = make_terciles(PC2),
+    PC3_t = make_terciles(PC3)
+  )
+
+
+t_pc1 <- df_pca %>%
+  select(PC1_t, ADCY3:UHMK1) %>%   # Variable de agrupación y genes
+  tbl_summary(
+    by = PC1_t,
+    type = everything() ~ "continuous", 
+    #Ningún gen sigue una distribución normal
+    statistic = all_continuous() ~ "{median} ({p25}-{p75})",
+  ) %>%
+  add_p(pvalue_fun = ~ style_pvalue(.x, digits = 3)) %>%
+  modify_header(label ~ md("**N**"))
+
+t_pc2 <- df_pca %>%
+  select(PC2_t, ADCY3:UHMK1) %>%
+  tbl_summary(by = PC2_t,
+  type = everything() ~ "continuous",
+  statistic = all_continuous() ~ "{median} ({p25}-{p75})",) %>%
+  add_p(pvalue_fun = ~ style_pvalue(.x, digits = 3)) %>%
+  modify_header(label ~ md("**N**"))
+
+# Fusionar tablas
+tabla_t_pc <- tbl_merge(
+  tbls = list(t_pc1, t_pc2),
+  tab_spanner = c("**Componente 1**", "**Componente 2**") # Títulos superiores
+) %>%
+  as_gt() %>%
+  tab_header(
+    title = md("**Expresión génica según terciles de componentes principales**")
+            ) %>%
+  tab_style(style = cell_text(size = "16px"),
+            locations = cells_title(groups = "title")
+            )%>%
+  tab_options(
+    table.width = pct(150),   
+    table.font.size = "14px"
+  )
+
+#gtsave(tabla_t_pc, filename = "Tablasegunterciles.docx")
+
+tabla_t_pc
+
+```
+
+## Regresión logística
+
+```{r}
+
+df_pca$tabaco=as.factor(df_pca$tabaco)
+df_pca$medicamento=as.factor(df_pca$medicamento)
+df_pca$sexo=as.factor(df_pca$sexo)
+df_pca$ansiedad=as.factor(df_pca$ansiedad)
+
+
+modelo_log <- glm(
+  imc_cat ~ PC1_t + PC2_t + PC3_t + edad_anios + sexo + frutas_g_d + verduras_g_d + cereales_g_d + legumbres_g_d+frutos_secos_g_d+lacteos_g_d+carnes_g_d+pescados_g_d+huevos_g_d+bolleria_industrial_g_d+af_moderada_h_semana+af_intensa_h_semana+alcohol+pad_mmhg+pas_mmhg+glucosa_mg_dl,
+  data = df_pca,
+  family = binomial
+)
+
+mlog <- glm(
+  imc_cat ~ PC1_t + PC2_t + PC3_t + edad_anios + sexo + carnes_g_d  + aceites_g_d + bolleria_industrial_g_d +
+    af_moderada_h_semana + af_intensa_h_semana+glucosa_mg_dl+colesterol_total_mg_dl+ldl_mg_dl+hdl_mg_dl+albumina_g_dl+bilirrubina_mg_dl+ast_u_l+alt_u_l+fosfatasa_alcalina_u_l+creatinina_mg_dl+urea_mg_dl+il6_pg_ml+tnf_alpha_pg_ml+ansiedad+depresion+trastornos,
+  data = df_pca,
+  family = binomial
+)
+
+summary(modelo_log)
+exp(coef(modelo_log))
+```
